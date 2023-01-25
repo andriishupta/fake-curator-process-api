@@ -5,7 +5,7 @@ nlp = spacy.load("en_core_web_sm")
 from flask import Flask
 app = Flask(__name__)
 
-@app.route("/api/process")
+@app.route("/")
 def hello_world():
     doc = nlp("Apple is looking at buying U.K. startup for $1 billion")
     for token in doc:
