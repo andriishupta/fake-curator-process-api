@@ -2,7 +2,6 @@
 TODO describe
 
 ## Flow
-Flow:
 - request from UI to process
 - read Firestore, throw if Article missing
 - process
