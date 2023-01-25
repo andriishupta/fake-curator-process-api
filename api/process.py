@@ -2,9 +2,9 @@ from http.server import BaseHTTPRequestHandler
 from urllib import parse
 
 import spacy
+spacy.cli.download("en_core_web_sm")
 
 nlp = spacy.load("en_core_web_sm")
-
 
 class handler(BaseHTTPRequestHandler):
 
