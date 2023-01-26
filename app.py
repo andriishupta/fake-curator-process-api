@@ -33,10 +33,21 @@ def process():
     article_snapshot = articles_ref.document(article_id).get()
 
     if not article_snapshot.exists:
-        print(u'No such document!')
+        print('No such document!')
         return jsonify(data=None, error="No such document!"), 404
 
     article = article_snapshot.to_dict()
+
+    if not article['parsed']:
+        print('Article is not parsed!')
+        return jsonify(data=None, error="Article is not parsed!"), 400
+
+    if article['processed']:
+        print('No action. Article has already been processed before!')
+        return jsonify(data=article, error=None)
+
+    print('Processing article...')
+
     header = nlp(article['content']['maybeHeader'])
     content = nlp(article['content']['mainContent'])
 
@@ -64,6 +75,8 @@ def process():
         "content": content_data
     }
 
-    articles_ref.document(article_id).update({"nlp": resp})
+    print('Saving to Firestore...')
+    articles_ref.document(article_id).update({"nlp": resp, "processed": True})
 
+    print('Article has been successfully processed!')
     return jsonify(data=resp, error=None)
