@@ -1,15 +1,69 @@
+from flask import Flask, request, jsonify
+
+import os
+from dotenv import load_dotenv
+
+import json
+
 import spacy
-spacy.cli.download("en_core_web_sm")
+
+from firebase_admin import credentials, firestore, initialize_app
+
+load_dotenv()
+
+# spacy.cli.download("en_core_web_sm")
 nlp = spacy.load("en_core_web_sm")
 
-from flask import Flask
+# Initialize Firestore DB
+service_account = json.loads(os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'))
+cred = credentials.Certificate(service_account)
+firebase_url = os.environ.get('FIREBASE_URL')
+default_app = initialize_app(cred, options={"databaseURL": firebase_url})
+db = firestore.client()
+articles_ref = db.collection('articles')
+
 app = Flask(__name__)
 
-@app.route("/")
-def hello_world():
-    doc = nlp("Apple is looking at buying U.K. startup for $1 billion")
-    for token in doc:
-        print(token.text, token.lemma_, token.pos_, token.tag_, token.dep_, token.shape_, token.is_alpha,
-              token.is_stop)
 
-    return "<p>Hello, World!</p>"
+@app.route("/", methods=['POST'])
+def process():
+    data = request.get_json()
+    article_id = data.get('id')
+
+    article_snapshot = articles_ref.document(article_id).get()
+
+    if not article_snapshot.exists:
+        print(u'No such document!')
+        return jsonify(data=None, error="No such document!"), 404
+
+    article = article_snapshot.to_dict()
+    header = nlp(article['content']['maybeHeader'])
+    content = nlp(article['content']['mainContent'])
+
+    header_without_stopwords = list(filter(lambda t: not t.is_stop, header))
+    content_without_stopwords = list(filter(lambda t: not t.is_stop, content))
+
+    header_data = list(map(lambda t: {
+        "text": t.text,
+        "lemma": t.lemma_,
+        "pos": t.pos_,
+    }, header_without_stopwords))
+
+    content_data = list(map(lambda t: {
+        "text": t.text,
+        "lemma": t.lemma_,
+        "pos": t.pos_,
+    }, content_without_stopwords))
+
+    # header_ents = list(map(lambda s: (s.text, s.lemma_), header.ents))
+
+    # add other things: count, most common, keywords, toxic lang, etc.
+
+    resp = {
+        "header": header_data,
+        "content": content_data
+    }
+
+    articles_ref.document(article_id).update({"nlp": resp})
+
+    return jsonify(data=resp, error=None)

@@ -1,4 +1,10 @@
+# build
 .vercel
-.idea
 
+# ENV
 venv
+.env
+.env*.local
+
+# IDE
+.idea
