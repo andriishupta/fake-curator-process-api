@@ -11,7 +11,7 @@ from firebase_admin import credentials, firestore, initialize_app
 
 load_dotenv()
 
-# spacy.cli.download("en_core_web_sm")
+spacy.cli.download("en_core_web_sm")
 nlp = spacy.load("en_core_web_sm")
 
 # Initialize Firestore DB
