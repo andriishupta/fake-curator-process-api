@@ -9,6 +9,8 @@ import spacy
 
 from firebase_admin import credentials, firestore, initialize_app
 
+app = Flask(__name__)
+
 load_dotenv()
 
 spacy.cli.download("en_core_web_sm")
@@ -21,8 +23,6 @@ firebase_url = os.environ.get('FIREBASE_URL')
 default_app = initialize_app(cred, options={"databaseURL": firebase_url})
 db = firestore.client()
 articles_ref = db.collection('articles')
-
-app = Flask(__name__)
 
 
 @app.route("/", methods=['POST'])
