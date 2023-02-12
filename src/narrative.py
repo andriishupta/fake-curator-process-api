@@ -1,4 +1,4 @@
-from api.nlp import nlp
+from src.api.nlp import nlp
 
 
 def extract_keywords(lemma_frequency, selection_ratio=0.1):
