@@ -16,13 +16,16 @@ def analyze_sentiment(doc):
 
     # Loop through each token in the document
     for token in doc:
-        sentiment_scores.append(token.sentiment)
+        if not token.is_alpha:
+            continue
+
+        sentiment_scores.append(token._.blob.polarity)
 
         # Check if the token has a sentiment score
-        if token.sentiment > 0:
+        if token._.blob.polarity > 0:
             pos_count += 1
             pos_words.append(token.text)
-        elif token.sentiment == 0:
+        elif token._.blob.polarity == 0:
             neu_count += 1
             neu_words.append(token.text)
         else:
@@ -38,17 +41,17 @@ def analyze_sentiment(doc):
     neg_ratio = neg_count / total
 
     # Get the most frequently used words for each sentiment
-    pos_top_words = Counter(pos_words).most_common(10)
-    neu_top_words = Counter(neu_words).most_common(10)
-    neg_top_words = Counter(neg_words).most_common(10)
+    pos_top_words = dict(Counter(pos_words).most_common(10))
+    neu_top_words = dict(Counter(neu_words).most_common(10))
+    neg_top_words = dict(Counter(neg_words).most_common(10))
 
     # Return the results
     return {
         "avg_sentiment": avg_sentiment,
         "positive_ratio": pos_ratio,
-        "neutral_ratio": neu_ratio,
-        "negative_ratio": neg_ratio,
         "positive_top_words": pos_top_words,
+        "neutral_ratio": neu_ratio,
         "neutral_top_words": neu_top_words,
+        "negative_ratio": neg_ratio,
         "negative_top_words": neg_top_words,
     }

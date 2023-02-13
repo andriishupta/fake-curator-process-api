@@ -1,12 +1,11 @@
 from collections import Counter
 
 
-def detect_biased_language(doc, subjectivity_ratio=0.5, lexical_diversity_ratio=0.5, polarity_ratio=0.5):
+def detect_biased_language(doc, subjectivity_ratio=0.5, lexical_diversity_ratio=0.5):
     # Initialize a list to store the biased words
     token_len = len(doc)
-    subjective_biased_words = []
-    polarity_biased_words = []
-    lexical_diversity_biased_words = []
+    subjective_words = []
+    lexical_diversity_words = []
 
     lemma_counts = {}
     for sent in doc.sents:
@@ -17,31 +16,34 @@ def detect_biased_language(doc, subjectivity_ratio=0.5, lexical_diversity_ratio=
     # Loop through each token in the document
     for token in doc:
         if token._.blob.subjectivity > subjectivity_ratio:
-            subjective_biased_words.append(token.text)
-
-        if token._.blob.polarity > polarity_ratio:
-            polarity_biased_words.append(token.text)
+            subjective_words.append(token.text)
 
         if lexical_diversity(lemma_counts, token) > lexical_diversity_ratio:
-            lexical_diversity_biased_words.append(token.text)
+            lexical_diversity_words.append(token.text)
 
-    subjective_biased_words_ratio = len(subjective_biased_words) / token_len
-    polarity_biased_words_ratio = len(polarity_biased_words) / token_len
-    lexical_diversity_biased_words_ratio = len(lexical_diversity_biased_words) / token_len
+    subjective_words_ratio = len(subjective_words) / token_len
+    lexical_diversity_words_ratio = len(lexical_diversity_words) / token_len
 
-    top_subjective_biased_words = Counter(subjective_biased_words).most_common(10)
-    top_polarity_words = Counter(polarity_biased_words).most_common(10)
-    top_lexical_diversity_biased_words = Counter(lexical_diversity_biased_words).most_common(10)
+    top_subjective_words = dict(Counter(subjective_words).most_common(10))
+    top_lexical_diversity_words = dict(Counter(lexical_diversity_words).most_common(10))
 
     # Return the results
     return {
-        "subjective_biased_words_ratio": subjective_biased_words_ratio,
-        "polarity_biased_words_ratio": polarity_biased_words_ratio,
-        "lexical_diversity_biased_words_ratio": lexical_diversity_biased_words_ratio,
-        "top_subjective_biased_words": top_subjective_biased_words,
-        "top_polarity_words": top_polarity_words,
-        "top_lexical_diversity_biased_words": top_lexical_diversity_biased_words,
+        "subjective_words_ratio": subjective_words_ratio,
+        "top_subjective_words": top_subjective_words,
+        "lexical_diversity_words_ratio": lexical_diversity_words_ratio,
+        "top_lexical_diversity_words": top_lexical_diversity_words,
     }
+
+
+def detect_dehumanizing_language(doc):
+    dehumanizing_entities = []
+    for ent in doc.ents:
+        if ent.label_ in ["ORG", "GPE"]:
+            for token in ent:
+                if token._.blob.polarity < 0:
+                    dehumanizing_entities.append(ent.text)
+    return len(dehumanizing_entities) / len(doc) if len(doc) else 0
 
 
 def lexical_diversity(lemma_counts, token):
@@ -53,12 +55,13 @@ def lexical_diversity(lemma_counts, token):
         return 0
 
 
-def detect_paraphrased_ideas(doc, similarity_threshold=0.5):
-    total_sents = len(list(doc.sents))
-    similar_sents = 0
-    for sent1 in doc.sents:
-        for sent2 in doc.sents:
-            if sent1.similarity(sent2) > similarity_threshold:
-                similar_sents += 1
-                break
-    return similar_sents / total_sents
+def detect_paraphrased_ideas(doc):
+    sents = [sent for sent in doc.sents]
+
+    similarities = []
+    for i in range(len(sents)):
+        for j in range(i + 1, len(sents)):
+            sim = sents[i].similarity(sents[j])
+            similarities.append(sim)
+
+    return sum(similarities) / len(similarities)

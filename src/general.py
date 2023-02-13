@@ -3,44 +3,38 @@ from heapq import nlargest
 from src.api.nlp import nlp
 
 
-def filter_doc(doc):
-    filtered_tokens = []
+def clean_doc(text):
+    doc = nlp(text)
 
-    # Iterate over the tokens in the processed text
-    for token in doc:
-        # Check if the token is a stop word, punctuation or contains some numbers/symbols
-        if not token.is_stop:
-            # If not, add the token to the filtered list
-            filtered_tokens.append(token)
+    processed_sents = []
+    for sent in doc.sents:
+        processed_tokens = []
+        for token in sent:
+            if not token.is_stop and not token.is_punct and not token.is_oov:
+                processed_tokens.append(token.text)
+        processed_sents.append(" ".join(processed_tokens))
 
-    body_clean_text = " ".join([token.text for token in filtered_tokens])
-
-    return nlp(body_clean_text)
+    return nlp(".".join(processed_sents))
 
 
 def summarize_doc(doc, selection_ratio=0.1):
-    sentences = [sent.text for sent in doc.sents]
-    word_frequencies = {}
-    for sent in sentences:
-        for word in sent:
-            if word.text not in word_frequencies:
-                word_frequencies[word.text] = 0
-            word_frequencies[word.text] += 1
-    max_frequency = max(word_frequencies.values())
-    for word in word_frequencies.keys():
-        word_frequencies[word] = (word_frequencies[word] / max_frequency)
-    sentence_scores = {}
-    for sent in sentences:
-        for word in sent:
-            if word.text.lower() in word_frequencies.keys():
-                if len(sent.text.split(" ")) < 30:
-                    if sent not in sentence_scores.keys():
-                        sentence_scores[sent] = word_frequencies[word.text.lower()]
-                    else:
-                        sentence_scores[sent] += word_frequencies[word.text.lower()]
-    summarized_sentences = nlargest(int(len(sentences) * selection_ratio), sentence_scores, key=sentence_scores.get)
+    # Create a list of all the noun chunks in the document
+    noun_chunks = [chunk.text for chunk in doc.noun_chunks]
 
-    return summarized_sentences
+    # Create a dictionary to store the similarity scores between each noun chunk and the whole document
+    similarity_scores = {}
+    for chunk in noun_chunks:
+        chunk = nlp(chunk)
+        similarity_scores[chunk.text] = doc.similarity(chunk)
+
+    # Sort the noun chunks by similarity score in descending order
+    sorted_chunks = sorted(similarity_scores.items(), key=lambda x: x[1], reverse=True)
+
+    # Select the top `selection_ratio` of noun chunks to form the summarized document
+    num_selected = int(len(noun_chunks) * selection_ratio)
+    summarized_chunks = [chunk[0] for chunk in sorted_chunks[:num_selected]]
+
+    return nlp(" ".join(summarized_chunks))
 
 
 def top_bigram_frequency(doc, selection_ratio=0.1):
@@ -78,6 +72,9 @@ def top_lemma_frequency(doc, selection_ratio=0.1):
 
     # Iterate over the tokens in the processed text
     for token in doc:
+        if not token.is_alpha:
+            continue
+
         # Get the lemma for each token
         lemma = token.lemma_.lower()
 

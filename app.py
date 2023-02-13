@@ -3,14 +3,14 @@ from flask import Flask, request, jsonify
 import os
 
 from src.api.firebase import articles_ref
-from src.api.nlp import nlp
 
-from src.general import filter_doc, summarize_doc, top_bigram_frequency, top_lemma_frequency
+from src.general import clean_doc, summarize_doc, top_bigram_frequency, top_lemma_frequency
 from src.narrative import extract_keywords
-from src.persuasion import detect_biased_language, detect_paraphrased_ideas
+from src.persuasion import detect_biased_language, detect_paraphrased_ideas, detect_dehumanizing_language
 from src.sentiment import analyze_sentiment
 
 app = Flask(__name__)
+app.config['JSON_SORT_KEYS'] = False
 
 is_production = os.environ.get("FLASK_ENV") == "production"
 
@@ -28,33 +28,31 @@ def process():
 
     article_data = article_snapshot.to_dict()
 
-    if not article_data['parsed']:
+    if 'parsed_data' not in article_data:
         print('Article is not parsed!')
         return jsonify(data=None, error="Article is not parsed!"), 400
 
-    if article_data['processed']:
+    if 'processed_data' in article_data:
         print('No action. Article has already been processed before!')
         return jsonify(data=article_data, error=None)
 
     print('Processing article...')
 
-    # article['raw_data']['meta']  # todo parse <meta/> for keywords and other useful info
-    # create header Doc as is
-    header_text = article_data['content']['maybeHeader']  # todo change content to raw_data
-    header_doc = nlp(header_text)
+    # todo parse <meta/> for keywords and other useful info
+    # article['processed_data']['meta']['title' | 'description']
 
-    # create body Doc without stopwords
-    body_text = article_data['content']['mainContent']
-    body_full_doc = nlp(body_text)
-    body_sents_count = len(list(body_full_doc.sents))
-    body_doc = filter_doc(body_full_doc)
+    header_text = article_data['parsed_data']['header']
+    header_doc = clean_doc(header_text)
+
+    body_text = article_data['parsed_data']['body']
+    body_doc = clean_doc(body_text)
 
     print("# -----------General-------------- #")
     lemma_frequency = top_lemma_frequency(body_doc)
     bigram_frequency = top_bigram_frequency(body_doc)
     general_data = {
         "token_count": len(body_doc),
-        "sentences_count": body_sents_count,
+        "sentences_count": len(list(body_doc.sents)),
         "lemma_frequency": lemma_frequency,
         "bigram_frequency": bigram_frequency,
     }
@@ -62,8 +60,9 @@ def process():
     print("# -----------Persuasion(Influencing beliefs)-------------- #")
     # Paraphrase(Repetition) | Bias Language | TODO: Red Herring(distraction) | TODO: Slogans
     persuasion_data = {
-        **detect_biased_language(body_doc),
         "paraphrased_ratio": detect_paraphrased_ideas(body_doc),
+        "dehumanizing_language_ratio": detect_dehumanizing_language(body_doc),
+        **detect_biased_language(body_doc)
     }
 
     print("# -----------Narrative-------------- #")
@@ -107,7 +106,6 @@ def process():
         print('Saving to Firestore...')
         articles_ref.document(article_id).update({
             "processed_data": processed_data,
-            "processed": True
         })
         print('Article has been successfully processed!')
 
