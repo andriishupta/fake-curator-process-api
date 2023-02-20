@@ -1,11 +1,10 @@
 from collections import Counter
 
 
-def detect_biased_language(doc, subjectivity_ratio=0.5, lexical_diversity_ratio=0.5):
+def detect_biased_language(doc, subjectivity_ratio=0.1):
     # Initialize a list to store the biased words
     token_len = len(doc)
     subjective_words = []
-    lexical_diversity_words = []
 
     lemma_counts = {}
     for sent in doc.sents:
@@ -18,32 +17,33 @@ def detect_biased_language(doc, subjectivity_ratio=0.5, lexical_diversity_ratio=
         if token._.blob.subjectivity > subjectivity_ratio:
             subjective_words.append(token.text)
 
-        if lexical_diversity(lemma_counts, token) > lexical_diversity_ratio:
-            lexical_diversity_words.append(token.text)
-
     subjective_words_ratio = len(subjective_words) / token_len
-    lexical_diversity_words_ratio = len(lexical_diversity_words) / token_len
 
     top_subjective_words = dict(Counter(subjective_words).most_common(10))
-    top_lexical_diversity_words = dict(Counter(lexical_diversity_words).most_common(10))
 
     # Return the results
     return {
         "subjective_words_ratio": subjective_words_ratio,
         "top_subjective_words": top_subjective_words,
-        "lexical_diversity_words_ratio": lexical_diversity_words_ratio,
-        "top_lexical_diversity_words": top_lexical_diversity_words,
     }
 
 
-def detect_dehumanizing_language(doc):
-    dehumanizing_entities = []
-    for ent in doc.ents:
-        if ent.label_ in ["ORG", "GPE"]:
-            for token in ent:
-                if token._.blob.polarity < 0:
-                    dehumanizing_entities.append(ent.text)
-    return len(dehumanizing_entities) / len(doc) if len(doc) else 0
+DEHUMANIZING_LABELS = {"PERSON", "NORP", "FAC", "ORG", "GPE", "LOC", "PRODUCT"}
+
+
+def detect_dehumanizing_language_ratio(doc):
+    num_dehumanizing = 0
+    num_total = 0
+
+    for token in doc:
+        if token.pos_ == "PROPN" and token.ent_type_ in DEHUMANIZING_LABELS:
+            num_dehumanizing += 1
+        num_total += 1
+
+    if num_total == 0:
+        return 0.0
+    else:
+        return num_dehumanizing / num_total
 
 
 def lexical_diversity(lemma_counts, token):

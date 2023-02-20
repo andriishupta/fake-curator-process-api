@@ -15,12 +15,13 @@ import matplotlib.pyplot as plt
 
 from src.api.firebase import articles_ref
 
-from src.general import clean_doc, summarize_doc, top_bigram_frequency, top_lemma_frequency
+from src.general import clean_doc, summarize_text, top_bigram_frequency, top_lemma_frequency
 from src.narrative import extract_keywords
-from src.persuasion import detect_biased_language, detect_paraphrased_ideas, detect_dehumanizing_language
+from src.persuasion import detect_biased_language, detect_paraphrased_ideas, detect_dehumanizing_language_ratio
 from src.sentiment import analyze_sentiment
 from src.linguistic import detect_unusual_inappropriate_language_ratio, detect_awkward_text_ratio
 from src.ner import get_ner_frequency
+from src.toxicity import detect_toxic_data, detect_toxicity_ratio
 
 app = Flask(__name__)
 app.config['JSON_SORT_KEYS'] = False
@@ -95,14 +96,13 @@ def process_text(header_text, body_text):
     # Paraphrase(Repetition) | Bias Language | TODO: Red Herring(distraction) | TODO: Slogans
     persuasion_data = {
         "paraphrased_ratio": detect_paraphrased_ideas(body_doc),
-        "dehumanizing_language_ratio": detect_dehumanizing_language(body_doc),
+        "dehumanizing_language_ratio": detect_dehumanizing_language_ratio(body_doc),
         **detect_biased_language(body_doc)
     }
 
     print("# -----------Narrative-------------- #")
     # Main idea | keywords | entities
-    summary_doc = summarize_doc(body_doc)
-    summary_text = " ".join([sent.text for sent in summary_doc])
+    summary_text, summary_doc = summarize_text(body_doc)
 
     narrative_data = {
         "keywords_meta": [],  # get from parsing <meta/>
@@ -122,8 +122,12 @@ def process_text(header_text, body_text):
     print("# -----------Toxicity-------------- #")
     # todo: implement toxicity detection with Twitter introduction to the system.
     # Classifiers: toxic | severe_toxic | obscene | threat | insult | identity_hate
-    # toxicity_data = detect_toxic_data(body)
-    toxicity_data = {}
+    # toxicity_classifiers = detect_toxic_data(body_doc)
+    # print(toxicity_classifiers)
+    # toxicity_data = {
+    #     "classifiers": toxicity_classifiers,
+    #     "avg_mark": detect_toxicity_ratio(toxicity_classifiers)
+    # }
 
     print("# -----------Contextual Fact-Checking-------------- #")
     # Detecting Context and process it with fact-checking API
@@ -138,8 +142,8 @@ def process_text(header_text, body_text):
         "persuasion": persuasion_data,
         "narrative": narrative_data,
         "linguistic": linguistic_data,
-        "toxicity": toxicity_data,
-        "contextual_fact_checking": contextual_fact_checking_data,
+        # "toxicity": toxicity_data,
+        # "contextual_fact_checking": contextual_fact_checking_data,
         "sentiment_analysis": sentiment_analysis_data,
     }
 
@@ -206,6 +210,8 @@ def process_mds():
             item['sentiment_analysis']['positive_ratio'],
             item['sentiment_analysis']['neutral_ratio'],
             item['sentiment_analysis']['negative_ratio'],
+
+            # item['toxicity']['avg_mark'],
         ]
         fake_values.append(item_values)
 
@@ -228,6 +234,8 @@ def process_mds():
             item['sentiment_analysis']['positive_ratio'],
             item['sentiment_analysis']['neutral_ratio'],
             item['sentiment_analysis']['negative_ratio'],
+
+            # item['toxicity']['avg_mark'],
         ]
         true_values.append(item_values)
 

@@ -1,5 +1,3 @@
-from heapq import nlargest
-
 from src.api.nlp import nlp
 
 
@@ -17,7 +15,7 @@ def clean_doc(text):
     return nlp(".".join(processed_sents))
 
 
-def summarize_doc(doc, selection_ratio=0.1):
+def summarize_doc_old(doc, selection_ratio=0.1):
     # Create a list of all the noun chunks in the document
     noun_chunks = [chunk.text for chunk in doc.noun_chunks]
 
@@ -35,6 +33,29 @@ def summarize_doc(doc, selection_ratio=0.1):
     summarized_chunks = [chunk[0] for chunk in sorted_chunks[:num_selected]]
 
     return nlp(" ".join(summarized_chunks))
+
+
+def summarize_text(doc):
+    """
+    Summarize the given text by selecting the most important sentences.
+    """
+    # Split the text into sentences and assign a score to each sentence based on its importance
+    sentences = [sent for sent in doc.sents]
+    sentence_scores = {}
+    for i, sentence in enumerate(sentences):
+        sentence_scores[i] = sentence.similarity(doc)
+
+    # Select the most important sentences and sort them by their position in the original text
+    top_sentences = sorted(sentence_scores, key=sentence_scores.get, reverse=True)[:2]
+    top_sentences.sort()
+
+    # Combine the top sentences into a summary and return it
+    summary = ""
+    for i in top_sentences:
+        summary += str(sentences[i]) + " "
+
+    summary = summary.strip()
+    return summary.strip(), nlp(summary)
 
 
 def top_bigram_frequency(doc, selection_ratio=0.1):
