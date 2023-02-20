@@ -8,3 +8,6 @@ venv
 
 # IDE
 .idea
+
+# Output
+/out/*.json
