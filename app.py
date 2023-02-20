@@ -27,7 +27,7 @@ app.config['JSON_SORT_KEYS'] = False
 
 is_production = os.environ.get("FLASK_ENV") == "production"
 
-CSV_LINES = 10
+CSV_LINES = 100
 
 
 @app.route("/", methods=['POST'])
@@ -260,28 +260,50 @@ def plot_results():
     plt.show()
 
 
-def plot_kmeans():
+def plot_clusters():
     with open('out/fake_mds.json', 'r') as f:
         fake_mds = json.load(f)
     with open('out/true_mds.json', 'r') as f:
         true_mds = json.load(f)
 
-    # Combine the MDS points into a single dataset
-    data = np.concatenate((true_mds, fake_mds), axis=0)
-
-    # Set the number of clusters (you can experiment with different values)
-    n_clusters = 2
+    # Concatenate MDS data and create labels
+    X = np.concatenate((fake_mds, true_mds))
+    y = np.concatenate((np.full(len(fake_mds), 'fake'), np.full(len(true_mds), 'real')))
 
     # Perform k-means clustering
-    kmeans = KMeans(n_clusters=n_clusters, random_state=0).fit(data)
-
-    # Get the cluster labels for each data point
+    k = 2  # Number of clusters
+    kmeans = KMeans(n_clusters=k).fit(X)
     labels = kmeans.labels_
 
-    # Visualize the clustering
-    plt.scatter(data[:, 0], data[:, 1], c=labels, cmap='viridis')
-    plt.scatter(kmeans.cluster_centers_[:, 0], kmeans.cluster_centers_[:, 1], marker='x', s=200, linewidths=3,
-                color='r')
+    # Generate scatter plot of MDS data
+    fig, ax = plt.subplots()
+    for label in np.unique(labels):
+        mask = labels == label
+        if label == 0:
+            color = 'red'  # Fake news
+        else:
+            color = 'green'  # True news
+        ax.scatter(X[mask, 0], X[mask, 1], c=color, label=label)
+
+    # Highlight misclassified points in each cluster
+    for label in np.unique(labels):
+        mask = labels == label
+        if label == 0:
+            incorrect_label = 1  # True news in fake news cluster
+        else:
+            incorrect_label = 0  # Fake news in true news cluster
+        opposite_mask = y[mask] == np.full(np.sum(mask), ('fake', 'real')[incorrect_label])
+        opposite_count = np.sum(opposite_mask)
+        if opposite_count > 0:
+            opposite_color = 'red' if incorrect_label == 0 else 'green'
+            ax.scatter(X[mask][opposite_mask, 0], X[mask][opposite_mask, 1], c=opposite_color, marker='x')
+
+    # Add plot title and legend
+    ax.set_title('MDS plot with k-means clustering')
+    ax.legend()
+
+    centroids = kmeans.cluster_centers_
+    plt.scatter(centroids[:, 0], centroids[:, 1], marker='x', s=200, linewidths=3, color='k')
     plt.show()
 
 
@@ -294,7 +316,7 @@ if __name__ == '__main__':
         process_data()
     elif args.function_name == 'plot_results':
         plot_results()
-    elif args.function_name == 'plot_kmeans':
-        plot_kmeans()
+    elif args.function_name == 'plot_clusters':
+        plot_clusters()
     else:
         print(f'Error: Invalid function name "{args.function_name}"')
