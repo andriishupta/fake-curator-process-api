@@ -8,7 +8,7 @@ def clean_doc(text):
     for sent in doc.sents:
         processed_tokens = []
         for token in sent:
-            if not token.is_stop and not token.is_punct and not token.is_oov:
+            if not token.is_stop and not token.is_punct:
                 processed_tokens.append(token.text)
         processed_sents.append(" ".join(processed_tokens))
 
@@ -110,4 +110,14 @@ def top_lemma_frequency(doc, selection_ratio=0.1):
     sorted_lemmas = sorted(lemma_freq.items(), key=lambda x: x[1], reverse=True)
     top = int(len(sorted_lemmas) * selection_ratio)
 
-    return dict(sorted_lemmas[:top])
+    top_lemmas_freq = dict(sorted_lemmas[:top])
+
+    top_lemmas_freq_ratio = {}
+    top_lemmas = []
+    total_doc_len = len(doc)
+
+    for k, v in top_lemmas_freq.items():
+        top_lemmas.append(k)
+        top_lemmas_freq_ratio[k] = v / total_doc_len
+
+    return top_lemmas_freq_ratio, top_lemmas

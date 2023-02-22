@@ -7,11 +7,21 @@ import json
 import argparse
 
 import numpy as np
+import pandas as pd
 
 from sklearn.manifold import MDS
 from sklearn.cluster import KMeans
 
+from sklearn.datasets import make_blobs, make_circles
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.model_selection import train_test_split
+from sklearn.svm import SVC
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, \
+    ConfusionMatrixDisplay
+
 import matplotlib.pyplot as plt
+
+from mpl_toolkits import mplot3d
 
 from src.api.firebase import articles_ref
 
@@ -21,7 +31,6 @@ from src.persuasion import detect_biased_language, detect_paraphrased_ideas, det
 from src.sentiment import analyze_sentiment
 from src.linguistic import detect_unusual_inappropriate_language_ratio, detect_awkward_text_ratio
 from src.ner import get_ner_frequency
-from src.toxicity import detect_toxic_data, detect_toxicity_ratio
 
 app = Flask(__name__)
 app.config['JSON_SORT_KEYS'] = False
@@ -82,12 +91,13 @@ def process_text(header_text, body_text):
     body_doc = clean_doc(body_text)
 
     print("# -----------General-------------- #")
-    lemma_frequency = top_lemma_frequency(body_doc)
+    lemma_frequency, top_lemmas = top_lemma_frequency(body_doc)
     bigram_frequency = top_bigram_frequency(body_doc)
     general_data = {
         "token_count": len(body_doc),
         "sentences_count": len(list(body_doc.sents)),
         "lemma_frequency": lemma_frequency,
+        "top_lemmas": top_lemmas,
         "bigram_frequency": bigram_frequency,
         "ner_frequency": get_ner_frequency(body_doc),
     }
@@ -106,8 +116,8 @@ def process_text(header_text, body_text):
 
     narrative_data = {
         "keywords_meta": [],  # get from parsing <meta/>
-        "keywords": extract_keywords(lemma_frequency),
-        "keywords_bigrams": extract_keywords(bigram_frequency),
+        "keywords": list(lemma_frequency),
+        "keywords_bigrams": list(bigram_frequency),
         "header": header_doc.text,
         "summary": summary_text,
         "header_summary_similarity_ratio": header_doc.similarity(summary_doc)
@@ -151,6 +161,7 @@ def process_text(header_text, body_text):
 
 
 def process_csv():
+    lemmas = set()
     fake_data = []
     true_data = []
 
@@ -162,6 +173,7 @@ def process_csv():
             text = row['text']
             try:
                 processed_data = process_text(title, text)
+                lemmas.update(processed_data["general"]["top_lemmas"])
                 fake_data.append(processed_data)
             except BaseException as e:
                 print('error processing row #', i, ' msg: ', str(e))
@@ -175,6 +187,7 @@ def process_csv():
             text = row['text']
             try:
                 processed_data = process_text(title, text)
+                lemmas.update(processed_data["general"]["top_lemmas"])
                 true_data.append(processed_data)
             except BaseException as e:
                 print('error processing row #', i, ' msg: ', str(e))
@@ -186,6 +199,19 @@ def process_csv():
     with open('out/true.json', 'w') as f:
         json.dump(true_data, f)
 
+    with open('out/lemmas.json', 'w') as f:
+        json.dump(list(lemmas), f)
+
+
+def lemmas_params(all_lemmas, item_lemmas_dict):
+    params = []
+    for lemma in all_lemmas:
+        if lemma in item_lemmas_dict:
+            params.append(item_lemmas_dict[lemma])
+        else:
+            params.append(0)
+    return params
+
 
 def process_mds():
     # Load processed data from fake.json and true.json
@@ -193,6 +219,8 @@ def process_mds():
         fake_data = json.load(f)
     with open('out/true.json', 'r') as f:
         true_data = json.load(f)
+    with open('out/lemmas.json', 'r') as f:
+        lemmas = json.load(f)
 
     fake_values = []
     for item in fake_data:
@@ -211,12 +239,9 @@ def process_mds():
             item['sentiment_analysis']['neutral_ratio'],
             item['sentiment_analysis']['negative_ratio'],
 
-            # item['toxicity']['avg_mark'],
+            *lemmas_params(lemmas, item['general']['lemma_frequency'])
         ]
         fake_values.append(item_values)
-
-    mds = MDS(n_components=2).fit_transform(np.array(fake_values))
-    fake_mds = mds.tolist()
 
     true_values = []
     for item in true_data:
@@ -235,29 +260,33 @@ def process_mds():
             item['sentiment_analysis']['neutral_ratio'],
             item['sentiment_analysis']['negative_ratio'],
 
-            # item['toxicity']['avg_mark'],
+            *lemmas_params(lemmas, item['general']['lemma_frequency'])
         ]
         true_values.append(item_values)
 
-    mds = MDS(n_components=2).fit_transform(np.array(true_values))
-    true_mds = mds.tolist()
+    mds = MDS().fit_transform(np.array(true_values + fake_values))
+    # mds = Isomap.fit_transform(np,true_values + fake_values)
 
     # Save output to fake_mds.json and true_mds.json
-    with open('out/fake_mds.json', 'w') as f:
-        json.dump(fake_mds, f)
-    with open('out/true_mds.json', 'w') as f:
-        json.dump(true_mds, f)
+    with open('out/mds_results.json', 'w') as f:
+        json.dump({
+            "mds": mds.tolist(),
+            "true": len(true_values),
+            "fake": len(fake_values),
+        }, f)
 
 
 def plot_results():
-    with open('out/fake_mds.json', 'r') as f:
-        fake_mds = json.load(f)
-    with open('out/true_mds.json', 'r') as f:
-        true_mds = json.load(f)
+    with open('out/mds_results.json', 'r') as f:
+        mds_results = json.load(f)
+
+    X = np.array(mds_results["mds"])
+    y = np.concatenate((np.ones(mds_results["true"]), np.zeros(mds_results["fake"])))
+
+    colors = np.where(y == 1, 'g', 'r')
 
     # Plot true MDS values in green and fake MDS values in red
-    plt.scatter([p[0] for p in true_mds], [p[1] for p in true_mds], c="g")
-    plt.scatter([p[0] for p in fake_mds], [p[1] for p in fake_mds], c="r")
+    plt.scatter(X[:, 0], X[:, 1], c=colors)
 
     # Add axis labels and title
     plt.xlabel("X")
@@ -315,6 +344,83 @@ def plot_clusters():
     plt.show()
 
 
+def process_svm_default():
+    true = pd.read_csv("data/True.csv")
+    true['label'] = 1
+    fake = pd.read_csv("data/Fake.csv")
+    fake['label'] = 0
+
+    df = pd.concat([true.head(CSV_LINES), fake.head(CSV_LINES)])
+    X = df['text'].values
+    y = df['label'].values
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    # extract features using TF-IDF
+    vectorizer = TfidfVectorizer()
+    X_train_tfidf = vectorizer.fit_transform(X_train)
+    X_test_tfidf = vectorizer.transform(X_test)
+
+    # train the SVM model
+    svm = SVC().fit(X_train_tfidf, y_train)
+
+    # evaluate the model on the testing set
+    y_pred = svm.predict(X_test_tfidf)
+    accuracy = accuracy_score(y_test, y_pred)
+    precision = precision_score(y_test, y_pred)
+    recall = recall_score(y_test, y_pred)
+    f1 = f1_score(y_test, y_pred)
+    print("Accuracy: {:.2f}, Precision: {:.2f}, Recall: {:.2f}, F1 Score: {:.2f}".format(
+        accuracy, precision, recall, f1))
+
+
+def process_svm():
+    # process_data()
+    # Load the MDS matrices
+    with open('out/mds_results.json', 'r') as f:
+        mds_results = json.load(f)
+
+    # Combine the MDS matrices and create target labels
+    X = np.array(mds_results["mds"])
+    y = np.concatenate((np.ones(mds_results["true"]), np.zeros(mds_results["fake"])))
+
+    # Split the dataset into training and testing sets
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    # Train the SVM model
+    svm = SVC(C=1, gamma='auto').fit(X_train, y_train)
+
+    # Evaluate the model on the testing set
+    y_pred = svm.predict(X_test)
+    accuracy = accuracy_score(y_test, y_pred)
+    precision = precision_score(y_test, y_pred)
+    recall = recall_score(y_test, y_pred)
+    f1 = f1_score(y_test, y_pred)
+
+    # Print the evaluation metrics
+    print(
+        "Accuracy: {:.2f}, Precision: {:.2f}, Recall: {:.2f}, F1 Score: {:.2f}".format(accuracy, precision, recall, f1))
+
+    # plot the data points
+    colors = np.where(y == 1, 'g', 'r')
+    plt.scatter(X[:, 0], X[:, 1], c=colors)
+
+    # plot the decision boundary
+    ax = plt.gca()
+    xlim = ax.get_xlim()
+    ylim = ax.get_ylim()
+
+    # create a grid to evaluate the SVM
+    xx, yy = np.meshgrid(np.linspace(xlim[0], xlim[1], 500),
+                         np.linspace(ylim[0], ylim[1], 500))
+    Z = svm.predict(np.c_[xx.ravel(), yy.ravel()])
+    Z = Z.reshape(xx.shape)
+    plt.contour(xx, yy, Z, colors='k', levels=[-1, 0, 1], alpha=0.5,
+                linestyles=['--', '-', '--'])
+    plt.show()
+
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('function_name', help='Name of function to run')
@@ -322,6 +428,10 @@ if __name__ == '__main__':
 
     if args.function_name == 'process_data':
         process_data()
+    elif args.function_name == 'process_svm_default':
+        process_svm_default()
+    elif args.function_name == 'process_svm':
+        process_svm()
     elif args.function_name == 'plot_results':
         plot_results()
     elif args.function_name == 'plot_clusters':
