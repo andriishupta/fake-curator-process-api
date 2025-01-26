@@ -339,6 +339,7 @@ def plot_clusters():
 #         return {"error": str(e)}
 
 
+# process only using TD-IDF extraction
 def process_svm_default():
     true = pd.read_csv("data/True.csv")
     true['label'] = 1
@@ -365,11 +366,13 @@ def process_svm_default():
     precision = precision_score(y_test, y_pred)
     recall = recall_score(y_test, y_pred)
     f1 = f1_score(y_test, y_pred)
-    print("Accuracy: {:.2f}, Precision: {:.2f}, Recall: {:.2f}, F1 Score: {:.2f}".format(
+    print("[DEFAULT] Accuracy: {:.2f}, Precision: {:.2f}, Recall: {:.2f}, F1 Score: {:.2f}".format(
         accuracy, precision, recall, f1))
 
 
-def process_svm():
+# process using customly calculated MDS values
+def process_svm_feature_vectors():
+    # get custom feature vectors from MDS_results
     with open('out/mds_results.json', 'r') as f:
         mds_results = json.load(f)
 
@@ -392,7 +395,7 @@ def process_svm():
 
     # Print the evaluation metrics
     print(
-        "Accuracy: {:.2f}, Precision: {:.2f}, Recall: {:.2f}, F1 Score: {:.2f}".format(accuracy, precision, recall, f1))
+        "[Feature Vectors] Accuracy: {:.2f}, Precision: {:.2f}, Recall: {:.2f}, F1 Score: {:.2f}".format(accuracy, precision, recall, f1))
 
     # plot the data points
     colors = np.where(y == 1, 'g', 'r')
@@ -427,8 +430,8 @@ if __name__ == '__main__':
         process_data()
     elif args.function_name == 'process_svm_default':
         process_svm_default()
-    elif args.function_name == 'process_svm':
-        process_svm()
+    elif args.function_name == 'process_svm_feature_vectors':
+        process_svm_feature_vectors()
     elif args.function_name == 'plot_results':
         plot_results()
     elif args.function_name == 'plot_clusters':
