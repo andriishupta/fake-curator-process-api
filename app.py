@@ -28,6 +28,112 @@ def process_data():
     process_csv()
     process_mds()
 
+
+def process_csv():
+    lemmas = set()
+    fake_data = []
+    true_data = []
+
+    with open('data/Fake.csv') as csvfile:
+        reader = csv.DictReader(csvfile)
+        for i, row in islice(enumerate(reader), CSV_LINES):
+            print('processing Fake #', i)
+            title = row['title']
+            text = row['text']
+            try:
+                processed_data = process_text(title, text)
+                lemmas.update(processed_data["general"]["top_lemmas"])
+                fake_data.append(processed_data)
+            except BaseException as e:
+                print('error processing row #', i, ' msg: ', str(e))
+                continue
+
+    with open('data/True.csv') as csvfile:
+        reader = csv.DictReader(csvfile)
+        for i, row in islice(enumerate(reader), CSV_LINES):
+            print('processing True #', i)
+            title = row['title']
+            text = row['text']
+            try:
+                processed_data = process_text(title, text)
+                lemmas.update(processed_data["general"]["top_lemmas"])
+                true_data.append(processed_data)
+            except BaseException as e:
+                print('error processing row #', i, ' msg: ', str(e))
+                continue
+
+    with open('out/fake.json', 'w') as f:
+        json.dump(fake_data, f)
+
+    with open('out/true.json', 'w') as f:
+        json.dump(true_data, f)
+
+    with open('out/lemmas.json', 'w') as f:
+        json.dump(list(lemmas), f)
+
+
+def process_mds():
+    # Load processed data from fake.json and true.json
+    with open('out/fake.json', 'r') as f:
+        fake_data = json.load(f)
+    with open('out/true.json', 'r') as f:
+        true_data = json.load(f)
+    with open('out/lemmas.json', 'r') as f:
+        lemmas = json.load(f)
+
+    fake_values = []
+    for item in fake_data:
+        item_values = [
+            item['persuasion']['paraphrased_ratio'],
+            item['persuasion']['dehumanizing_language_ratio'],
+            item['persuasion']['subjective_words_ratio'],
+
+            item['narrative']['header_summary_similarity_ratio'],
+
+            item['linguistic']['unusual_inappropriate_language_ratio'],
+            item['linguistic']['awkward_text_ratio'],
+
+            item['sentiment_analysis']['avg_sentiment'],
+            item['sentiment_analysis']['positive_ratio'],
+            item['sentiment_analysis']['neutral_ratio'],
+            item['sentiment_analysis']['negative_ratio'],
+
+            *lemmas_params(lemmas, item['general']['lemma_frequency'])
+        ]
+        fake_values.append(item_values)
+
+    true_values = []
+    for item in true_data:
+        item_values = [
+            item['persuasion']['paraphrased_ratio'],
+            item['persuasion']['dehumanizing_language_ratio'],
+            item['persuasion']['subjective_words_ratio'],
+
+            item['narrative']['header_summary_similarity_ratio'],
+
+            item['linguistic']['unusual_inappropriate_language_ratio'],
+            item['linguistic']['awkward_text_ratio'],
+
+            item['sentiment_analysis']['avg_sentiment'],
+            item['sentiment_analysis']['positive_ratio'],
+            item['sentiment_analysis']['neutral_ratio'],
+            item['sentiment_analysis']['negative_ratio'],
+
+            *lemmas_params(lemmas, item['general']['lemma_frequency'])
+        ]
+        true_values.append(item_values)
+
+    mds = MDS().fit_transform(np.array(true_values + fake_values))
+    # mds = Isomap.fit_transform(np,true_values + fake_values)
+
+    # Save output to fake_mds.json and true_mds.json
+    with open('out/mds_results.json', 'w') as f:
+        json.dump({
+            "mds": mds.tolist(),
+            "true": len(true_values),
+            "fake": len(fake_values),
+        }, f)
+
 def process_text(header_text, body_text):
     header_doc = clean_doc(header_text)
     body_doc = clean_doc(body_text)
@@ -104,50 +210,6 @@ def process_text(header_text, body_text):
 
     return processed_data
 
-
-def process_csv():
-    lemmas = set()
-    fake_data = []
-    true_data = []
-
-    with open('data/Fake.csv') as csvfile:
-        reader = csv.DictReader(csvfile)
-        for i, row in islice(enumerate(reader), CSV_LINES):
-            print('processing Fake #', i)
-            title = row['title']
-            text = row['text']
-            try:
-                processed_data = process_text(title, text)
-                lemmas.update(processed_data["general"]["top_lemmas"])
-                fake_data.append(processed_data)
-            except BaseException as e:
-                print('error processing row #', i, ' msg: ', str(e))
-                continue
-
-    with open('data/True.csv') as csvfile:
-        reader = csv.DictReader(csvfile)
-        for i, row in islice(enumerate(reader), CSV_LINES):
-            print('processing True #', i)
-            title = row['title']
-            text = row['text']
-            try:
-                processed_data = process_text(title, text)
-                lemmas.update(processed_data["general"]["top_lemmas"])
-                true_data.append(processed_data)
-            except BaseException as e:
-                print('error processing row #', i, ' msg: ', str(e))
-                continue
-
-    with open('out/fake.json', 'w') as f:
-        json.dump(fake_data, f)
-
-    with open('out/true.json', 'w') as f:
-        json.dump(true_data, f)
-
-    with open('out/lemmas.json', 'w') as f:
-        json.dump(list(lemmas), f)
-
-
 def lemmas_params(all_lemmas, item_lemmas_dict):
     params = []
     for lemma in all_lemmas:
@@ -156,70 +218,6 @@ def lemmas_params(all_lemmas, item_lemmas_dict):
         else:
             params.append(0)
     return params
-
-
-def process_mds():
-    # Load processed data from fake.json and true.json
-    with open('out/fake.json', 'r') as f:
-        fake_data = json.load(f)
-    with open('out/true.json', 'r') as f:
-        true_data = json.load(f)
-    with open('out/lemmas.json', 'r') as f:
-        lemmas = json.load(f)
-
-    fake_values = []
-    for item in fake_data:
-        item_values = [
-            item['persuasion']['paraphrased_ratio'],
-            item['persuasion']['dehumanizing_language_ratio'],
-            item['persuasion']['subjective_words_ratio'],
-
-            item['narrative']['header_summary_similarity_ratio'],
-
-            item['linguistic']['unusual_inappropriate_language_ratio'],
-            item['linguistic']['awkward_text_ratio'],
-
-            item['sentiment_analysis']['avg_sentiment'],
-            item['sentiment_analysis']['positive_ratio'],
-            item['sentiment_analysis']['neutral_ratio'],
-            item['sentiment_analysis']['negative_ratio'],
-
-            *lemmas_params(lemmas, item['general']['lemma_frequency'])
-        ]
-        fake_values.append(item_values)
-
-    true_values = []
-    for item in true_data:
-        item_values = [
-            item['persuasion']['paraphrased_ratio'],
-            item['persuasion']['dehumanizing_language_ratio'],
-            item['persuasion']['subjective_words_ratio'],
-
-            item['narrative']['header_summary_similarity_ratio'],
-
-            item['linguistic']['unusual_inappropriate_language_ratio'],
-            item['linguistic']['awkward_text_ratio'],
-
-            item['sentiment_analysis']['avg_sentiment'],
-            item['sentiment_analysis']['positive_ratio'],
-            item['sentiment_analysis']['neutral_ratio'],
-            item['sentiment_analysis']['negative_ratio'],
-
-            *lemmas_params(lemmas, item['general']['lemma_frequency'])
-        ]
-        true_values.append(item_values)
-
-    mds = MDS().fit_transform(np.array(true_values + fake_values))
-    # mds = Isomap.fit_transform(np,true_values + fake_values)
-
-    # Save output to fake_mds.json and true_mds.json
-    with open('out/mds_results.json', 'w') as f:
-        json.dump({
-            "mds": mds.tolist(),
-            "true": len(true_values),
-            "fake": len(fake_values),
-        }, f)
-
 
 def plot_results():
     with open('out/mds_results.json', 'r') as f:
@@ -366,8 +364,23 @@ def process_svm_default():
     precision = precision_score(y_test, y_pred)
     recall = recall_score(y_test, y_pred)
     f1 = f1_score(y_test, y_pred)
-    print("[DEFAULT] Accuracy: {:.2f}, Precision: {:.2f}, Recall: {:.2f}, F1 Score: {:.2f}".format(
+    print("[Default] Accuracy: {:.2f}, Precision: {:.2f}, Recall: {:.2f}, F1 Score: {:.2f}".format(
         accuracy, precision, recall, f1))
+
+    # Additional testing on randomly selected real news
+    true_random = true.sample(n=100, random_state=42)
+    fake_random = fake.sample(n=100, random_state=42)
+    df_random = pd.concat([true_random, fake_random])
+    X_random = vectorizer.transform(df_random['text'].values)
+    y_random = df_random['label'].values
+
+    y_random_pred = svm.predict(X_random)
+    accuracy_random = accuracy_score(y_random, y_random_pred)
+    precision_random = precision_score(y_random, y_random_pred)
+    recall_random = recall_score(y_random, y_random_pred)
+    f1_random = f1_score(y_random, y_random_pred)
+    print("[Default][Random Values Testing] Accuracy: {:.2f}, Precision: {:.2f}, Recall: {:.2f}, F1 Score: {:.2f}".format(
+        accuracy_random, precision_random, recall_random, f1_random))
 
 
 # process using customly calculated MDS values
@@ -396,6 +409,21 @@ def process_svm_feature_vectors():
     # Print the evaluation metrics
     print(
         "[Feature Vectors] Accuracy: {:.2f}, Precision: {:.2f}, Recall: {:.2f}, F1 Score: {:.2f}".format(accuracy, precision, recall, f1))
+
+    # Additional testing on randomly selected real news
+    true_random = pd.read_csv("data/True.csv").sample(n=100, random_state=42)
+    fake_random = pd.read_csv("data/Fake.csv").sample(n=100, random_state=42)
+    df_random = pd.concat([true_random, fake_random])
+    X_random = np.array(mds_results["mds"])[df_random.index]
+    y_random = df_random['label'].values
+
+    y_random_pred = svm.predict(X_random)
+    accuracy_random = accuracy_score(y_random, y_random_pred)
+    precision_random = precision_score(y_random, y_random_pred)
+    recall_random = recall_score(y_random, y_random_pred)
+    f1_random = f1_score(y_random, y_random_pred)
+    print("[Feature Vectors][Random Values Testing] Accuracy: {:.2f}, Precision: {:.2f}, Recall: {:.2f}, F1 Score: {:.2f}".format(
+        accuracy_random, precision_random, recall_random, f1_random))
 
     # plot the data points
     colors = np.where(y == 1, 'g', 'r')
