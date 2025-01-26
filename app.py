@@ -17,51 +17,51 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 
 import matplotlib.pyplot as plt
 
-from src.general import clean_doc, summarize_text, top_bigram_frequency, top_lemma_frequency, extend_text_with_explanation
+from src.general import clean_doc, summarize_text, top_bigram_frequency, top_lemma_frequency, \
+    extend_text_with_explanation
 from src.persuasion import detect_biased_language, detect_paraphrased_ideas, detect_dehumanizing_language_ratio
 from src.sentiment import analyze_sentiment
 from src.linguistic import detect_unusual_inappropriate_language_ratio, detect_awkward_text_ratio
 from src.ner import get_ner_frequency
 
-CSV_LINES = 1000
+CSV_LINES = 100
 
 def process_data():
     process_csv()
     process_mds()
 
-
-def process_csv():
+def process_csv(fake_csv_path='data/Fake.csv', true_csv_path='data/True.csv', output_dir='out', csv_lines=CSV_LINES):
     lemmas = set()
     fake_data = []
     true_data = []
 
-    with open('data/Fake.csv') as csvfile:
-        reader = csv.DictReader(csvfile)
-        for i, row in islice(enumerate(reader), CSV_LINES):
-            print('processing Fake #', i)
-            title = row['title']
-            text = row['text']
-            try:
-                processed_data = process_text(title, text)
-                lemmas.update(processed_data["general"]["top_lemmas"])
-                fake_data.append(processed_data)
-            except BaseException as e:
-                print('error processing row #', i, ' msg: ', str(e))
-                continue
+    def sample_and_process(file_path, label, data_list, sample_size):
+        try:
+            with open(file_path, 'r', encoding='utf-8') as csvfile:
+                reader = list(csv.DictReader(csvfile))
+                total_rows = len(reader)
+                sampled = random.sample(reader, sample_size) if total_rows >= sample_size else reader
+                for i, row in enumerate(sampled, 1):
+                    title = row.get('title', '').strip()
+                    text = row.get('text', '').strip()
+                    if not title or not text:
+                        continue
+                    try:
+                        print(f'Processing "{label}" #{i}; title: {title}')
+                        processed = process_text(title, text)
+                        lemmas.update(processed.get("general", {}).get("top_lemmas", []))
+                        data_list.append(processed)
+                    except:
+                        continue
+        except:
+            pass
 
-    with open('data/True.csv') as csvfile:
-        reader = csv.DictReader(csvfile)
-        for i, row in islice(enumerate(reader), CSV_LINES):
-            print('processing True #', i)
-            title = row['title']
-            text = row['text']
-            try:
-                processed_data = process_text(title, text)
-                lemmas.update(processed_data["general"]["top_lemmas"])
-                true_data.append(processed_data)
-            except BaseException as e:
-                print('error processing row #', i, ' msg: ', str(e))
-                continue
+    sample_and_process(fake_csv_path, 'Fake', fake_data, csv_lines)
+    sample_and_process(true_csv_path, 'True', true_data, csv_lines)
+
+    random.shuffle(fake_data)
+    random.shuffle(true_data)
+    lemmas_sorted = sorted(lemmas)
 
     with open('out/fake.json', 'w') as f:
         json.dump(fake_data, f)
@@ -70,7 +70,9 @@ def process_csv():
         json.dump(true_data, f)
 
     with open('out/lemmas.json', 'w') as f:
-        json.dump(list(lemmas), f)
+        json.dump(list(lemmas_sorted), f)
+
+    print("Data processing complete. Output saved to 'out/' directory.")
 
 
 def process_text(header_text, body_text):
@@ -212,6 +214,7 @@ def process_mds():
             "fake": len(fake_values),
         }, f)
 
+
 def lemmas_params(all_lemmas, item_lemmas_dict):
     params = []
     for lemma in all_lemmas:
@@ -220,6 +223,7 @@ def lemmas_params(all_lemmas, item_lemmas_dict):
         else:
             params.append(0)
     return params
+
 
 def plot_results():
     with open('out/mds_results.json', 'r') as f:
@@ -381,8 +385,9 @@ def process_svm_default():
     precision_random = precision_score(y_random, y_random_pred)
     recall_random = recall_score(y_random, y_random_pred)
     f1_random = f1_score(y_random, y_random_pred)
-    print("[Default][Random Values Testing] Accuracy: {:.2f}, Precision: {:.2f}, Recall: {:.2f}, F1 Score: {:.2f}".format(
-        accuracy_random, precision_random, recall_random, f1_random))
+    print(
+        "[Default][Random Values Testing] Accuracy: {:.2f}, Precision: {:.2f}, Recall: {:.2f}, F1 Score: {:.2f}".format(
+            accuracy_random, precision_random, recall_random, f1_random))
 
 
 def process_svm_feature_vectors():
@@ -465,8 +470,9 @@ def process_svm_feature_vectors():
     f1_random = f1_score(y_random, y_random_pred)
 
     # SINGLE-LINE PRINT for random-subset metrics
-    print("[Feature Vectors][Random Values Testing] Accuracy: {:.2f}, Precision: {:.2f}, Recall: {:.2f}, F1 Score: {:.2f}"
-          .format(accuracy_random, precision_random, recall_random, f1_random))
+    print(
+        "[Feature Vectors][Random Values Testing] Accuracy: {:.2f}, Precision: {:.2f}, Recall: {:.2f}, F1 Score: {:.2f}"
+        .format(accuracy_random, precision_random, recall_random, f1_random))
 
     # 7) Plot the data points (entire X, not just test)
     colors = np.where(y == 1, 'g', 'r')
@@ -508,6 +514,10 @@ if __name__ == '__main__':
 
     if args.function_name == 'process_data':
         process_data()
+    elif args.function_name == 'process_csv':
+        process_csv()
+    elif args.function_name == 'process_mds':
+        process_mds()
     elif args.function_name == 'process_svm_default':
         process_svm_default()
     elif args.function_name == 'process_svm_feature_vectors':
