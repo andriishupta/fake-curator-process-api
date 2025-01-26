@@ -1,6 +1,3 @@
-from flask import Flask, request, jsonify
-
-import os
 from itertools import islice
 import csv
 import json
@@ -12,78 +9,31 @@ import pandas as pd
 from sklearn.manifold import MDS
 from sklearn.cluster import KMeans
 
-from sklearn.datasets import make_blobs, make_circles
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, \
-    ConfusionMatrixDisplay
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
 import matplotlib.pyplot as plt
 
-from mpl_toolkits import mplot3d
-
-from src.api.firebase import articles_ref
-
-from src.general import clean_doc, summarize_text, top_bigram_frequency, top_lemma_frequency
-from src.narrative import extract_keywords
+from src.general import clean_doc, summarize_text, top_bigram_frequency, top_lemma_frequency, extend_text_with_explanation
 from src.persuasion import detect_biased_language, detect_paraphrased_ideas, detect_dehumanizing_language_ratio
 from src.sentiment import analyze_sentiment
 from src.linguistic import detect_unusual_inappropriate_language_ratio, detect_awkward_text_ratio
 from src.ner import get_ner_frequency
 
-app = Flask(__name__)
-app.config['JSON_SORT_KEYS'] = False
-
-is_production = os.environ.get("FLASK_ENV") == "production"
-
-CSV_LINES = 100
-
-
-@app.route("/", methods=['POST'])
-def process():
-    data = request.get_json()
-    article_id = data.get('id')
-
-    article_snapshot = articles_ref.document(article_id).get()
-
-    if not article_snapshot.exists:
-        print('No such document!')
-        return jsonify(data=None, error="No such document!"), 404
-
-    article_data = article_snapshot.to_dict()
-
-    if 'parsed_data' not in article_data:
-        print('Article is not parsed!')
-        return jsonify(data=None, error="Article is not parsed!"), 400
-
-    if 'processed_data' in article_data:
-        print('No action. Article has already been processed before!')
-        return jsonify(data=article_data, error=None)
-
-    print('Processing article...')
-
-    # todo parse <meta/> for keywords and other useful info
-    # article['processed_data']['meta']['title' | 'description']
-
-    header_text = article_data['parsed_data']['header']
-    body_text = article_data['parsed_data']['body']
-
-    processed_data = process_text(header_text, body_text)
-
-    if is_production:
-        print('Saving to Firestore...')
-        articles_ref.document(article_id).update({
-            "processed_data": processed_data,
-        })
-        print('Article has been successfully processed!')
-
-    return jsonify(data=processed_data, error=None)
+CSV_LINES = 5
 
 
 def process_data():
     process_csv()
     process_mds()
+
+def process_all():
+    process_data()
+    process_svm()
+    plot_results()
+    plot_clusters()
 
 
 def process_text(header_text, body_text):
@@ -156,6 +106,9 @@ def process_text(header_text, body_text):
         # "contextual_fact_checking": contextual_fact_checking_data,
         "sentiment_analysis": sentiment_analysis_data,
     }
+
+    print("# -----------Post Process-------------- #")
+    processed_data["extended_text_with_explanation"] = extend_text_with_explanation(body_text, processed_data)
 
     return processed_data
 
@@ -298,14 +251,11 @@ def plot_results():
 
 
 def plot_clusters():
-    with open('out/fake_mds.json', 'r') as f:
-        fake_mds = json.load(f)
-    with open('out/true_mds.json', 'r') as f:
-        true_mds = json.load(f)
+    with open('out/mds_results.json', 'r') as f:
+        mds_results = json.load(f)
 
-    # Concatenate MDS data and create labels
-    X = np.concatenate((fake_mds, true_mds))
-    y = np.concatenate((np.full(len(fake_mds), 'fake'), np.full(len(true_mds), 'real')))
+    X = np.array(mds_results["mds"])
+    y = np.concatenate((np.ones(mds_results["true"]), np.zeros(mds_results["fake"])))
 
     # Perform k-means clustering
     k = 2  # Number of clusters
@@ -317,9 +267,9 @@ def plot_clusters():
     for label in np.unique(labels):
         mask = labels == label
         if label == 0:
-            color = 'red'  # Fake news
+            color = 'green'
         else:
-            color = 'green'  # True news
+            color = 'red'
         ax.scatter(X[mask, 0], X[mask, 1], c=color, label=label)
 
     # Highlight misclassified points in each cluster
@@ -342,6 +292,59 @@ def plot_clusters():
     centroids = kmeans.cluster_centers_
     plt.scatter(centroids[:, 0], centroids[:, 1], marker='x', s=200, linewidths=3, color='k')
     plt.show()
+
+
+# import tweepy
+# from textblob import TextBlob
+#
+#
+# # Function to analyze sentiment bias in Twitter comments
+# def analyze_twitter_bias(tweet_id, api_key, api_secret, access_token, access_secret):
+#     """
+#     Analyzes the average bias of a Twitter conversation based on comments' sentiment.
+#
+#     Parameters:
+#         tweet_id (str): The ID of the tweet to analyze.
+#         api_key (str): Twitter API key.
+#         api_secret (str): Twitter API secret key.
+#         access_token (str): Twitter access token.
+#         access_secret (str): Twitter access token secret.
+#
+#     Returns:
+#         dict: A dictionary containing the average sentiment score and total comments analyzed.
+#     """
+#     # Authenticate with the Twitter API
+#     auth = tweepy.OAuthHandler(api_key, api_secret)
+#     auth.set_access_token(access_token, access_secret)
+#     api = tweepy.API(auth)
+#
+#     try:
+#         # Fetch replies to the tweet
+#         replies = []
+#         for tweet in tweepy.Cursor(api.search_tweets, q=f'to:{api.get_status(tweet_id).user.screen_name}',
+#                                    since_id=tweet_id, tweet_mode='extended').items():
+#             if hasattr(tweet, 'in_reply_to_status_id_str'):
+#                 if tweet.in_reply_to_status_id_str == tweet_id:
+#                     replies.append(tweet.full_text)
+#
+#         if not replies:
+#             return {"average_sentiment": None, "total_comments": 0}
+#
+#         # Analyze sentiment of each reply
+#         sentiment_scores = []
+#         for reply in replies:
+#             sentiment = TextBlob(reply).sentiment.polarity
+#             sentiment_scores.append(sentiment)
+#
+#         # Calculate average sentiment
+#         average_sentiment = sum(sentiment_scores) / len(sentiment_scores)
+#         return {
+#             "average_sentiment": average_sentiment,
+#             "total_comments": len(replies)
+#         }
+#
+#     except Exception as e:
+#         return {"error": str(e)}
 
 
 def process_svm_default():
@@ -375,8 +378,6 @@ def process_svm_default():
 
 
 def process_svm():
-    # process_data()
-    # Load the MDS matrices
     with open('out/mds_results.json', 'r') as f:
         mds_results = json.load(f)
 
@@ -420,13 +421,15 @@ def process_svm():
     plt.show()
 
 
-
+# how to run: `python app.py %function_name%`
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('function_name', help='Name of function to run')
     args = parser.parse_args()
 
-    if args.function_name == 'process_data':
+    if args.function_name == 'process_all':
+        process_all()
+    elif args.function_name == 'process_data':
         process_data()
     elif args.function_name == 'process_svm_default':
         process_svm_default()

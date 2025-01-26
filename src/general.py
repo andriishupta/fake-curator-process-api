@@ -93,7 +93,7 @@ def top_lemma_frequency(doc, selection_ratio=0.1):
 
     # Iterate over the tokens in the processed text
     for token in doc:
-        if not token.is_alpha:
+        if not token.is_alpha or len(token.lemma_) < 3:# allow only 3+-letter words
             continue
 
         # Get the lemma for each token
@@ -121,3 +121,44 @@ def top_lemma_frequency(doc, selection_ratio=0.1):
         top_lemmas_freq_ratio[k] = v / total_doc_len
 
     return top_lemmas_freq_ratio, top_lemmas
+
+
+def extend_text_with_explanation(input_text, process_data):
+    top_lemmas = process_data['general']['top_lemmas']
+    bigram_frequency_keys = list(process_data['general']['bigram_frequency'].keys())
+    top_subjective_words = list(process_data['persuasion']['top_subjective_words'].keys())
+    keywords = process_data['narrative']['keywords']
+    positive_top_words = list(process_data['sentiment_analysis']['positive_top_words'].keys())
+    negative_top_words = list(process_data['sentiment_analysis']['negative_top_words'].keys())
+
+    # Create a mapping for the words to their corresponding labels
+    word_label_map = {}
+
+    for word in top_lemmas:
+        word_label_map[word] = "top-lemma"
+
+    for word in top_subjective_words:
+        word_label_map[word] = "top-subjective"
+
+    for word in keywords:
+        word_label_map[word] = "keyword"
+
+    for word in positive_top_words:
+        word_label_map[word] = "top-positive"
+
+    for word in negative_top_words:
+        word_label_map[word] = "top-negative"
+
+    # Annotate bigrams
+    bigrams = sorted(bigram_frequency_keys, key=len,
+                     reverse=True)  # Sort bigrams by length to avoid partial replacements
+    for bigram in bigrams:
+        input_text = input_text.replace(bigram, f"{bigram} (frequent-combination)")
+
+    # Annotate single words
+    words = sorted(word_label_map.keys(), key=len, reverse=True)  # Sort words by length to avoid partial replacements
+    for word in words:
+        label = word_label_map[word]
+        input_text = input_text.replace(word, f"{word} ({label})")
+
+    return input_text

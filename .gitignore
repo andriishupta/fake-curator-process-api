@@ -11,3 +11,8 @@ venv
 
 # Output
 /out/*.json
+
+
+# Downloaded models
+#en_core_web_md-3.5.0-py3-none-any.whl
+*.whl
