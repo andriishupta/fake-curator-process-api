@@ -1,4 +1,3 @@
-from itertools import islice
 import csv
 import json
 import argparse
@@ -24,7 +23,7 @@ from src.sentiment import analyze_sentiment
 from src.linguistic import detect_unusual_inappropriate_language_ratio, detect_awkward_text_ratio
 from src.ner import get_ner_frequency
 
-CSV_LINES = 100
+CSV_LINES = 10
 
 def process_data():
     process_csv()
