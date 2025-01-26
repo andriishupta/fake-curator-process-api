@@ -2,6 +2,7 @@ from itertools import islice
 import csv
 import json
 import argparse
+import random
 
 import numpy as np
 import pandas as pd
@@ -22,7 +23,7 @@ from src.sentiment import analyze_sentiment
 from src.linguistic import detect_unusual_inappropriate_language_ratio, detect_awkward_text_ratio
 from src.ner import get_ner_frequency
 
-CSV_LINES = 100
+CSV_LINES = 1000
 
 def process_data():
     process_csv()
@@ -71,68 +72,6 @@ def process_csv():
     with open('out/lemmas.json', 'w') as f:
         json.dump(list(lemmas), f)
 
-
-def process_mds():
-    # Load processed data from fake.json and true.json
-    with open('out/fake.json', 'r') as f:
-        fake_data = json.load(f)
-    with open('out/true.json', 'r') as f:
-        true_data = json.load(f)
-    with open('out/lemmas.json', 'r') as f:
-        lemmas = json.load(f)
-
-    fake_values = []
-    for item in fake_data:
-        item_values = [
-            item['persuasion']['paraphrased_ratio'],
-            item['persuasion']['dehumanizing_language_ratio'],
-            item['persuasion']['subjective_words_ratio'],
-
-            item['narrative']['header_summary_similarity_ratio'],
-
-            item['linguistic']['unusual_inappropriate_language_ratio'],
-            item['linguistic']['awkward_text_ratio'],
-
-            item['sentiment_analysis']['avg_sentiment'],
-            item['sentiment_analysis']['positive_ratio'],
-            item['sentiment_analysis']['neutral_ratio'],
-            item['sentiment_analysis']['negative_ratio'],
-
-            *lemmas_params(lemmas, item['general']['lemma_frequency'])
-        ]
-        fake_values.append(item_values)
-
-    true_values = []
-    for item in true_data:
-        item_values = [
-            item['persuasion']['paraphrased_ratio'],
-            item['persuasion']['dehumanizing_language_ratio'],
-            item['persuasion']['subjective_words_ratio'],
-
-            item['narrative']['header_summary_similarity_ratio'],
-
-            item['linguistic']['unusual_inappropriate_language_ratio'],
-            item['linguistic']['awkward_text_ratio'],
-
-            item['sentiment_analysis']['avg_sentiment'],
-            item['sentiment_analysis']['positive_ratio'],
-            item['sentiment_analysis']['neutral_ratio'],
-            item['sentiment_analysis']['negative_ratio'],
-
-            *lemmas_params(lemmas, item['general']['lemma_frequency'])
-        ]
-        true_values.append(item_values)
-
-    mds = MDS().fit_transform(np.array(true_values + fake_values))
-    # mds = Isomap.fit_transform(np,true_values + fake_values)
-
-    # Save output to fake_mds.json and true_mds.json
-    with open('out/mds_results.json', 'w') as f:
-        json.dump({
-            "mds": mds.tolist(),
-            "true": len(true_values),
-            "fake": len(fake_values),
-        }, f)
 
 def process_text(header_text, body_text):
     header_doc = clean_doc(header_text)
@@ -209,6 +148,69 @@ def process_text(header_text, body_text):
     processed_data["extended_text_with_explanation"] = extend_text_with_explanation(body_text, processed_data)
 
     return processed_data
+
+
+def process_mds():
+    # Load processed data from fake.json and true.json
+    with open('out/fake.json', 'r') as f:
+        fake_data = json.load(f)
+    with open('out/true.json', 'r') as f:
+        true_data = json.load(f)
+    with open('out/lemmas.json', 'r') as f:
+        lemmas = json.load(f)
+
+    fake_values = []
+    for item in fake_data:
+        item_values = [
+            item['persuasion']['paraphrased_ratio'],
+            item['persuasion']['dehumanizing_language_ratio'],
+            item['persuasion']['subjective_words_ratio'],
+
+            item['narrative']['header_summary_similarity_ratio'],
+
+            item['linguistic']['unusual_inappropriate_language_ratio'],
+            item['linguistic']['awkward_text_ratio'],
+
+            item['sentiment_analysis']['avg_sentiment'],
+            item['sentiment_analysis']['positive_ratio'],
+            item['sentiment_analysis']['neutral_ratio'],
+            item['sentiment_analysis']['negative_ratio'],
+
+            *lemmas_params(lemmas, item['general']['lemma_frequency'])
+        ]
+        fake_values.append(item_values)
+
+    true_values = []
+    for item in true_data:
+        item_values = [
+            item['persuasion']['paraphrased_ratio'],
+            item['persuasion']['dehumanizing_language_ratio'],
+            item['persuasion']['subjective_words_ratio'],
+
+            item['narrative']['header_summary_similarity_ratio'],
+
+            item['linguistic']['unusual_inappropriate_language_ratio'],
+            item['linguistic']['awkward_text_ratio'],
+
+            item['sentiment_analysis']['avg_sentiment'],
+            item['sentiment_analysis']['positive_ratio'],
+            item['sentiment_analysis']['neutral_ratio'],
+            item['sentiment_analysis']['negative_ratio'],
+
+            *lemmas_params(lemmas, item['general']['lemma_frequency'])
+        ]
+        true_values.append(item_values)
+
+    mds = MDS().fit_transform(np.array(true_values + fake_values))
+    # mds = Isomap.fit_transform(np,true_values + fake_values)
+
+    # Save output to fake_mds.json and true_mds.json
+    with open('out/mds_results.json', 'w') as f:
+        json.dump({
+            "mds": mds.tolist(),
+            "true": len(true_values),
+            "fake": len(fake_values),
+        }, f)
 
 def lemmas_params(all_lemmas, item_lemmas_dict):
     params = []
@@ -383,64 +385,114 @@ def process_svm_default():
         accuracy_random, precision_random, recall_random, f1_random))
 
 
-# process using customly calculated MDS values
 def process_svm_feature_vectors():
-    # get custom feature vectors from MDS_results
+    # 1) Load MDS results
     with open('out/mds_results.json', 'r') as f:
         mds_results = json.load(f)
 
-    # Combine the MDS matrices and create target labels
+    # 2) Build feature matrix X and labels y
     X = np.array(mds_results["mds"])
-    y = np.concatenate((np.ones(mds_results["true"]), np.zeros(mds_results["fake"])))
+    # '1' for True articles, '0' for Fake articles
+    y = np.concatenate((
+        np.ones(mds_results["true"]),
+        np.zeros(mds_results["fake"])
+    ))
 
-    # Split the dataset into training and testing sets
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    # 3) Standard train/test split (all data)
+    X_train, X_test, y_train, y_test, idx_train, idx_test = train_test_split(
+        X, y, np.arange(len(y)),  # Keep track of original indices as well
+        test_size=0.2,
+        random_state=42
+    )
 
-    # Train the SVM model
-    svm = SVC(C=1, gamma='auto').fit(X_train, y_train)
+    # 4) Train an SVM model
+    svm = SVC(kernel='linear', random_state=42)
+    svm.fit(X_train, y_train)
 
-    # Evaluate the model on the testing set
+    # 5) Evaluate on the main test split
     y_pred = svm.predict(X_test)
-    accuracy = accuracy_score(y_test, y_pred)
-    precision = precision_score(y_test, y_pred)
-    recall = recall_score(y_test, y_pred)
-    f1 = f1_score(y_test, y_pred)
+    accuracy_main = accuracy_score(y_test, y_pred)
+    precision_main = precision_score(y_test, y_pred)
+    recall_main = recall_score(y_test, y_pred)
+    f1_main = f1_score(y_test, y_pred)
 
-    # Print the evaluation metrics
-    print(
-        "[Feature Vectors] Accuracy: {:.2f}, Precision: {:.2f}, Recall: {:.2f}, F1 Score: {:.2f}".format(accuracy, precision, recall, f1))
+    # SINGLE-LINE PRINT for main train/test metrics
+    print("[Feature Vectors] Accuracy: {:.2f}, Precision: {:.2f}, Recall: {:.2f}, F1 Score: {:.2f}"
+          .format(accuracy_main, precision_main, recall_main, f1_main))
 
-    # Additional testing on randomly selected real news
-    true_random = pd.read_csv("data/True.csv").sample(n=100, random_state=42)
-    fake_random = pd.read_csv("data/Fake.csv").sample(n=100, random_state=42)
-    df_random = pd.concat([true_random, fake_random])
-    X_random = np.array(mds_results["mds"])[df_random.index]
-    y_random = df_random['label'].values
+    # 6) Additional testing on a RANDOM SUBSET WITHIN THE TEST SET
+    #    This guarantees no overlap with the training set.
 
+    # figure out which test-set rows are "true" vs "fake"
+    # (We know that if idx < mds_results["true"], it was originally True -> label=1, else label=0)
+    total_true = mds_results["true"]
+    # We'll look at the 'idx_test' array to see which original indices ended up in the test set
+    test_true_indices = []
+    test_fake_indices = []
+    for i, original_idx in enumerate(idx_test):
+        if original_idx < total_true:
+            test_true_indices.append(i)  # 'i' is the local index in X_test
+        else:
+            test_fake_indices.append(i)
+
+    # how many random "true" to test
+    n_samples_true = 20
+    # how many random "fake" to test
+    n_samples_fake = 20
+
+    # randomly sample local indices from test_true_indices / test_fake_indices
+    random_true_indices = random.sample(
+        test_true_indices,
+        min(n_samples_true, len(test_true_indices))
+    )
+    random_fake_indices = random.sample(
+        test_fake_indices,
+        min(n_samples_fake, len(test_fake_indices))
+    )
+
+    # combine them
+    random_subset_indices = random_true_indices + random_fake_indices
+
+    # build X_random, y_random
+    X_random = X_test[random_subset_indices]
+    y_random = y_test[random_subset_indices]
+
+    # Evaluate on random subset
     y_random_pred = svm.predict(X_random)
     accuracy_random = accuracy_score(y_random, y_random_pred)
     precision_random = precision_score(y_random, y_random_pred)
     recall_random = recall_score(y_random, y_random_pred)
     f1_random = f1_score(y_random, y_random_pred)
-    print("[Feature Vectors][Random Values Testing] Accuracy: {:.2f}, Precision: {:.2f}, Recall: {:.2f}, F1 Score: {:.2f}".format(
-        accuracy_random, precision_random, recall_random, f1_random))
 
-    # plot the data points
+    # SINGLE-LINE PRINT for random-subset metrics
+    print("[Feature Vectors][Random Values Testing] Accuracy: {:.2f}, Precision: {:.2f}, Recall: {:.2f}, F1 Score: {:.2f}"
+          .format(accuracy_random, precision_random, recall_random, f1_random))
+
+    # 7) Plot the data points (entire X, not just test)
     colors = np.where(y == 1, 'g', 'r')
-    plt.scatter(X[:, 0], X[:, 1], c=colors)
+    plt.scatter(X[:, 0], X[:, 1], c=colors, alpha=0.6, edgecolor='k')
 
-    # plot the decision boundary
+    # 8) Optional: show the decision boundary for 2D
     ax = plt.gca()
     xlim = ax.get_xlim()
     ylim = ax.get_ylim()
 
-    # create a grid to evaluate the SVM
-    xx, yy = np.meshgrid(np.linspace(xlim[0], xlim[1], 500),
-                         np.linspace(ylim[0], ylim[1], 500))
+    xx, yy = np.meshgrid(
+        np.linspace(xlim[0], xlim[1], 300),
+        np.linspace(ylim[0], ylim[1], 300)
+    )
     Z = svm.predict(np.c_[xx.ravel(), yy.ravel()])
     Z = Z.reshape(xx.shape)
-    plt.contour(xx, yy, Z, colors='k', levels=[-1, 0, 1], alpha=0.5,
-                linestyles=['--', '-', '--'])
+
+    # Plot decision boundary
+    plt.contour(xx, yy, Z, levels=[0.5], colors='k', linestyles=['-'])
+
+    # 9) Show standard main test metrics in plot title
+    plt.xlabel("MDS Dimension 1")
+    plt.ylabel("MDS Dimension 2")
+    plt.title("Feature Vectors (MDS)\nAcc={:.2f}, Prec={:.2f}, Rec={:.2f}, F1={:.2f}"
+              .format(accuracy_main, precision_main, recall_main, f1_main))
+
     plt.show()
 
 
