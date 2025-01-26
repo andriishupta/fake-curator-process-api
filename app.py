@@ -258,7 +258,7 @@ def plot_clusters():
     fig, ax = plt.subplots()
     for label in np.unique(labels):
         mask = labels == label
-        if label == 0:
+        if label == 1:
             color = 'green'
         else:
             color = 'red'
