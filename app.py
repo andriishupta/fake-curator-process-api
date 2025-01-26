@@ -23,7 +23,7 @@ from src.sentiment import analyze_sentiment
 from src.linguistic import detect_unusual_inappropriate_language_ratio, detect_awkward_text_ratio
 from src.ner import get_ner_frequency
 
-CSV_LINES = 10
+CSV_LINES = 1000
 
 def process_data():
     process_csv()
@@ -164,7 +164,7 @@ def process_mds():
     for item in fake_data:
         item_values = [
             # most important
-            item['persuasion']['paraphrased_ratio'],
+            # item['persuasion']['paraphrased_ratio'],
             item['persuasion']['dehumanizing_language_ratio'],
             item['persuasion']['subjective_words_ratio'],
 
@@ -187,7 +187,7 @@ def process_mds():
     for item in true_data:
         item_values = [
             # most important
-            item['persuasion']['paraphrased_ratio'],
+            # item['persuasion']['paraphrased_ratio'],
             item['persuasion']['dehumanizing_language_ratio'],
             item['persuasion']['subjective_words_ratio'],
 
