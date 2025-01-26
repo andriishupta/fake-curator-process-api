@@ -163,10 +163,12 @@ def process_mds():
     fake_values = []
     for item in fake_data:
         item_values = [
+            # most important
             item['persuasion']['paraphrased_ratio'],
             item['persuasion']['dehumanizing_language_ratio'],
             item['persuasion']['subjective_words_ratio'],
 
+            # most important
             item['narrative']['header_summary_similarity_ratio'],
 
             item['linguistic']['unusual_inappropriate_language_ratio'],
@@ -184,10 +186,12 @@ def process_mds():
     true_values = []
     for item in true_data:
         item_values = [
+            # most important
             item['persuasion']['paraphrased_ratio'],
             item['persuasion']['dehumanizing_language_ratio'],
             item['persuasion']['subjective_words_ratio'],
 
+            # most important
             item['narrative']['header_summary_similarity_ratio'],
 
             item['linguistic']['unusual_inappropriate_language_ratio'],
