@@ -22,19 +22,11 @@ from src.sentiment import analyze_sentiment
 from src.linguistic import detect_unusual_inappropriate_language_ratio, detect_awkward_text_ratio
 from src.ner import get_ner_frequency
 
-CSV_LINES = 5
-
+CSV_LINES = 100
 
 def process_data():
     process_csv()
     process_mds()
-
-def process_all():
-    process_data()
-    process_svm()
-    plot_results()
-    plot_clusters()
-
 
 def process_text(header_text, body_text):
     header_doc = clean_doc(header_text)
@@ -422,14 +414,16 @@ def process_svm():
 
 
 # how to run: `python app.py %function_name%`
+# example:
+# python app.py process_data
+# python app.py process_svm
+# python app.py plot_results
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('function_name', help='Name of function to run')
     args = parser.parse_args()
 
-    if args.function_name == 'process_all':
-        process_all()
-    elif args.function_name == 'process_data':
+    if args.function_name == 'process_data':
         process_data()
     elif args.function_name == 'process_svm_default':
         process_svm_default()
